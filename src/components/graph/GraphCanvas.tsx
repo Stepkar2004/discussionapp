@@ -111,10 +111,16 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
 
   // Handle node drag
   const handleNodeDrag = useCallback((nodeId: string, e: Konva.KonvaEventObject<DragEvent>) => {
+    // Get the new position from the dragged group
     const newX = e.target.x();
     const newY = e.target.y();
     
+    // Update the node position in the store
     updateNode(nodeId, { x: newX, y: newY });
+    
+    // Reset the group position to prevent coordinate drift
+    // This ensures the visual position matches the stored position
+    e.target.position({ x: newX, y: newY });
   }, [updateNode]);
 
   // Handle mouse move for temporary connection line
@@ -174,6 +180,7 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
         draggable
         onClick={(e) => handleNodeClick(node.id, e)}
         onDblClick={(e) => handleNodeDoubleClick(node.id, e)}
+        onDragMove={(e) => handleNodeDrag(node.id, e)}
         onDragEnd={(e) => handleNodeDrag(node.id, e)}
       >
         {/* Node background */}
@@ -257,33 +264,106 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
     const endX = toNode.x + toNode.width / 2;
     const endY = toNode.y + toNode.height / 2;
     
-    // Calculate arrow points
-    const angle = Math.atan2(endY - startY, endX - startX);
-    const arrowLength = 15;
-    const arrowWidth = 8;
+    // Calculate curve control points for smooth bezier curve
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
     
-    const arrowX1 = endX - arrowLength * Math.cos(angle - Math.PI / 6);
-    const arrowY1 = endY - arrowLength * Math.sin(angle - Math.PI / 6);
-    const arrowX2 = endX - arrowLength * Math.cos(angle + Math.PI / 6);
-    const arrowY2 = endY - arrowLength * Math.sin(angle + Math.PI / 6);
+    // Create curved path - adjust curve intensity based on distance
+    const curveIntensity = Math.min(distance * 0.4, 100);
+    const controlX1 = startX + dx * 0.3;
+    const controlY1 = startY - curveIntensity;
+    const controlX2 = endX - dx * 0.3;
+    const controlY2 = endY - curveIntensity;
+    
+    // Calculate arrow points at the end of the curve
+    const angle = Math.atan2(endY - controlY2, endX - controlX2);
+    const arrowLength = 20;
+    const arrowWidth = 12;
+    
+    // Adjust end point to not overlap with node
+    const adjustedEndX = endX - 25 * Math.cos(angle);
+    const adjustedEndY = endY - 25 * Math.sin(angle);
+    
+    const arrowX1 = adjustedEndX - arrowLength * Math.cos(angle - Math.PI / 6);
+    const arrowY1 = adjustedEndY - arrowLength * Math.sin(angle - Math.PI / 6);
+    const arrowX2 = adjustedEndX - arrowLength * Math.cos(angle + Math.PI / 6);
+    const arrowY2 = adjustedEndY - arrowLength * Math.sin(angle + Math.PI / 6);
+    
+    // Create bezier curve points
+    const curvePoints = [];
+    for (let t = 0; t <= 1; t += 0.05) {
+      const x = Math.pow(1 - t, 3) * startX + 
+                3 * Math.pow(1 - t, 2) * t * controlX1 + 
+                3 * (1 - t) * Math.pow(t, 2) * controlX2 + 
+                Math.pow(t, 3) * adjustedEndX;
+      const y = Math.pow(1 - t, 3) * startY + 
+                3 * Math.pow(1 - t, 2) * t * controlY1 + 
+                3 * (1 - t) * Math.pow(t, 2) * controlY2 + 
+                Math.pow(t, 3) * adjustedEndY;
+      curvePoints.push(x, y);
+    }
     
     return (
       <Group key={connection.id}>
-        {/* Connection line */}
+        {/* Connection shadow for depth */}
         <Line
-          points={[startX, startY, endX, endY]}
-          stroke={connectionType.color}
-          strokeWidth={2}
-          opacity={0.8}
+          points={curvePoints}
+          stroke="rgba(0, 0, 0, 0.1)"
+          strokeWidth={4}
+          lineCap="round"
+          lineJoin="round"
+          shadowColor="rgba(0, 0, 0, 0.2)"
+          shadowBlur={3}
+          shadowOffsetX={2}
+          shadowOffsetY={2}
         />
         
-        {/* Arrow head */}
+        {/* Main connection curve */}
         <Line
-          points={[endX, endY, arrowX1, arrowY1, arrowX2, arrowY2]}
+          points={curvePoints}
+          stroke={connectionType.color}
+          strokeWidth={3}
+          lineCap="round"
+          lineJoin="round"
+          opacity={0.9}
+          shadowColor={connectionType.color}
+          shadowBlur={5}
+          shadowOpacity={0.3}
+        />
+        
+        {/* Arrow head with improved styling */}
+        <Line
+          points={[adjustedEndX, adjustedEndY, arrowX1, arrowY1, arrowX2, arrowY2]}
           stroke={connectionType.color}
           strokeWidth={2}
           fill={connectionType.color}
           closed
+          opacity={0.95}
+          shadowColor="rgba(0, 0, 0, 0.3)"
+          shadowBlur={3}
+          shadowOffsetX={1}
+          shadowOffsetY={1}
+        />
+        
+        {/* Connection type indicator (small circle at midpoint) */}
+        <Circle
+          x={curvePoints[Math.floor(curvePoints.length / 2) - 1]}
+          y={curvePoints[Math.floor(curvePoints.length / 2)]}
+          radius={6}
+          fill="white"
+          stroke={connectionType.color}
+          strokeWidth={2}
+          opacity={0.9}
+          shadowColor="rgba(0, 0, 0, 0.2)"
+          shadowBlur={2}
+        />
+        
+        <Circle
+          x={curvePoints[Math.floor(curvePoints.length / 2) - 1]}
+          y={curvePoints[Math.floor(curvePoints.length / 2)]}
+          radius={3}
+          fill={connectionType.color}
           opacity={0.8}
         />
       </Group>
@@ -299,14 +379,45 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
     
     const startX = startNode.x + startNode.width / 2;
     const startY = startNode.y + startNode.height / 2;
+    const endX = tempConnection.x;
+    const endY = tempConnection.y;
+    
+    // Create a simple curved line for the temporary connection
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const curveIntensity = Math.min(distance * 0.3, 80);
+    
+    const controlX1 = startX + dx * 0.3;
+    const controlY1 = startY - curveIntensity;
+    const controlX2 = endX - dx * 0.3;
+    const controlY2 = endY - curveIntensity;
+    
+    // Create bezier curve points for temp connection
+    const tempCurvePoints = [];
+    for (let t = 0; t <= 1; t += 0.1) {
+      const x = Math.pow(1 - t, 3) * startX + 
+                3 * Math.pow(1 - t, 2) * t * controlX1 + 
+                3 * (1 - t) * Math.pow(t, 2) * controlX2 + 
+                Math.pow(t, 3) * endX;
+      const y = Math.pow(1 - t, 3) * startY + 
+                3 * Math.pow(1 - t, 2) * t * controlY1 + 
+                3 * (1 - t) * Math.pow(t, 2) * controlY2 + 
+                Math.pow(t, 3) * endY;
+      tempCurvePoints.push(x, y);
+    }
     
     return (
       <Line
-        points={[startX, startY, tempConnection.x, tempConnection.y]}
-        stroke="#999"
-        strokeWidth={2}
-        opacity={0.5}
-        dash={[5, 5]}
+        points={tempCurvePoints}
+        stroke="#3b82f6"
+        strokeWidth={3}
+        opacity={0.6}
+        dash={[8, 4]}
+        lineCap="round"
+        lineJoin="round"
+        shadowColor="rgba(59, 130, 246, 0.3)"
+        shadowBlur={5}
       />
     );
   };
