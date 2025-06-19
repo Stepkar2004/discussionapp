@@ -109,18 +109,30 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
     setEditingNode(nodeId);
   }, [setEditingNode]);
 
-  // Handle node drag
-  const handleNodeDrag = useCallback((nodeId: string, e: Konva.KonvaEventObject<DragEvent>) => {
-    // Get the new position from the dragged group
+  // // Handle node drag
+  // const handleNodeDrag = useCallback((nodeId: string, e: Konva.KonvaEventObject<DragEvent>) => {
+  //   // Get the new position from the dragged group
+  //   const newX = e.target.x();
+  //   const newY = e.target.y();
+    
+  //   // Update the node position in the store
+  //   updateNode(nodeId, { x: newX, y: newY });
+    
+  //   // Reset the group position to prevent coordinate drift
+  //   // This ensures the visual position matches the stored position
+  //   e.target.position({ x: newX, y: newY });
+  // }, [updateNode]);
+  // This function will now only be used for onDragEnd
+  const handleNodeDragEnd = useCallback((nodeId: string, e: Konva.KonvaEventObject<DragEvent>) => {
+    // Get the final position from the dragged group
     const newX = e.target.x();
     const newY = e.target.y();
     
-    // Update the node position in the store
+    // Update the node position in the store just once, at the end of the drag.
     updateNode(nodeId, { x: newX, y: newY });
     
-    // Reset the group position to prevent coordinate drift
-    // This ensures the visual position matches the stored position
-    e.target.position({ x: newX, y: newY });
+    // The re-render from the store update will declaratively set the final position.
+    // We no longer need the e.target.position() call.
   }, [updateNode]);
 
   // Handle mouse move for temporary connection line
@@ -180,8 +192,11 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
         draggable
         onClick={(e) => handleNodeClick(node.id, e)}
         onDblClick={(e) => handleNodeDoubleClick(node.id, e)}
-        onDragMove={(e) => handleNodeDrag(node.id, e)}
-        onDragEnd={(e) => handleNodeDrag(node.id, e)}
+        // REMOVE onDragMove entirely
+        // onDragMove={(e) => handleNodeDrag(node.id, e)}  <-- DELETE THIS LINE
+        
+        // UPDATE onDragEnd to use the new handler
+        onDragEnd={(e) => handleNodeDragEnd(node.id, e)} // <-- USE THE NEW HANDLER HERE
       >
         {/* Node background */}
         <Rect
