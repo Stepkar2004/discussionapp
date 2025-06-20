@@ -16,6 +16,7 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionStart, setConnectionStart] = useState<string | null>(null);
   const [tempConnection, setTempConnection] = useState<{ x: number; y: number } | null>(null);
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
 
   const {
     graphState,
@@ -109,30 +110,22 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
     setEditingNode(nodeId);
   }, [setEditingNode]);
 
-  // // Handle node drag
-  // const handleNodeDrag = useCallback((nodeId: string, e: Konva.KonvaEventObject<DragEvent>) => {
-  //   // Get the new position from the dragged group
-  //   const newX = e.target.x();
-  //   const newY = e.target.y();
-    
-  //   // Update the node position in the store
-  //   updateNode(nodeId, { x: newX, y: newY });
-    
-  //   // Reset the group position to prevent coordinate drift
-  //   // This ensures the visual position matches the stored position
-  //   e.target.position({ x: newX, y: newY });
-  // }, [updateNode]);
-  // This function will now only be used for onDragEnd
+  // Handle node drag start - track which node is being dragged
+  const handleNodeDragStart = useCallback((nodeId: string, e: Konva.KonvaEventObject<DragEvent>) => {
+    setDraggedNodeId(nodeId);
+  }, []);
+
+  // Handle node drag end - update store position only once
   const handleNodeDragEnd = useCallback((nodeId: string, e: Konva.KonvaEventObject<DragEvent>) => {
     // Get the final position from the dragged group
     const newX = e.target.x();
     const newY = e.target.y();
     
-    // Update the node position in the store just once, at the end of the drag.
+    // Update the node position in the store
     updateNode(nodeId, { x: newX, y: newY });
     
-    // The re-render from the store update will declaratively set the final position.
-    // We no longer need the e.target.position() call.
+    // Clear the dragged node tracker
+    setDraggedNodeId(null);
   }, [updateNode]);
 
   // Handle mouse move for temporary connection line
@@ -183,6 +176,7 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
     const config = getNodeTypeConfig(node.type);
     const isSelected = selectedNodeId === node.id;
     const isEditing = isEditingNode === node.id;
+    const isBeingDragged = draggedNodeId === node.id;
     
     return (
       <Group
@@ -192,11 +186,8 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
         draggable
         onClick={(e) => handleNodeClick(node.id, e)}
         onDblClick={(e) => handleNodeDoubleClick(node.id, e)}
-        // REMOVE onDragMove entirely
-        // onDragMove={(e) => handleNodeDrag(node.id, e)}  <-- DELETE THIS LINE
-        
-        // UPDATE onDragEnd to use the new handler
-        onDragEnd={(e) => handleNodeDragEnd(node.id, e)} // <-- USE THE NEW HANDLER HERE
+        onDragStart={(e) => handleNodeDragStart(node.id, e)}
+        onDragEnd={(e) => handleNodeDragEnd(node.id, e)}
       >
         {/* Node background */}
         <Rect
@@ -274,10 +265,16 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
     
     const connectionType = CONNECTION_TYPES.find(ct => ct.type === connection.relationshipType) || CONNECTION_TYPES[0];
     
-    const startX = fromNode.x + fromNode.width / 2;
-    const startY = fromNode.y + fromNode.height / 2;
-    const endX = toNode.x + toNode.width / 2;
-    const endY = toNode.y + toNode.height / 2;
+    // For dragged nodes, use the current visual position, not stored position
+    const fromNodeX = draggedNodeId === fromNode.id ? fromNode.x : fromNode.x;
+    const fromNodeY = draggedNodeId === fromNode.id ? fromNode.y : fromNode.y;
+    const toNodeX = draggedNodeId === toNode.id ? toNode.x : toNode.x;
+    const toNodeY = draggedNodeId === toNode.id ? toNode.y : toNode.y;
+    
+    const startX = fromNodeX + fromNode.width / 2;
+    const startY = fromNodeY + fromNode.height / 2;
+    const endX = toNodeX + toNode.width / 2;
+    const endY = toNodeY + toNode.height / 2;
     
     // Calculate curve control points for smooth bezier curve
     const dx = endX - startX;
