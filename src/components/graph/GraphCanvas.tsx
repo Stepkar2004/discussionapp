@@ -126,6 +126,9 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
     
     // Clear the dragged node tracker
     setDraggedNodeId(null);
+
+    // PREVENT EVENT BUBBLING UP TO THE STAGE
+    e.cancelBubble = true;
   }, [updateNode]);
 
   // Handle mouse move for temporary connection line
