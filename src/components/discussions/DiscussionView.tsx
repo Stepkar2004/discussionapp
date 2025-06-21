@@ -1,6 +1,6 @@
 // src/components/discussions/DiscussionView.tsx
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { ArrowLeft, Edit, Share, Users, Globe, Lock } from 'lucide-react';
 import { Discussion, NodeType } from '../../types';
 import { useDiscussionsStore } from '../../stores/discussionsStore';
@@ -18,8 +18,9 @@ interface DiscussionViewProps {
 }
 
 export function DiscussionView({ discussion, onBack, onEdit }: DiscussionViewProps) {
-  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
 
   const {
     loadDiscussion,
@@ -39,29 +40,34 @@ export function DiscussionView({ discussion, onBack, onEdit }: DiscussionViewPro
     initDiscussion();
   }, [discussion.id, loadDiscussion]);
 
+  // Use ResizeObserver for robust and accurate size tracking
   useEffect(() => {
-    const updateCanvasSize = () => {
-      const container = document.getElementById('canvas-container');
-      if (container) {
-        const rect = container.getBoundingClientRect();
-        setCanvasSize({
-          width: rect.width,
-          height: rect.height
-        });
-      }
-    };
+    const container = canvasContainerRef.current;
+    if (!container) return;
 
-    updateCanvasSize();
-    window.addEventListener('resize', updateCanvasSize);
-    
+    const resizeObserver = new ResizeObserver(entries => {
+      if (entries[0]) {
+        const { width, height } = entries[0].contentRect;
+        if(width > 0 && height > 0) {
+            // Round the dimensions to the nearest whole pixel
+            setCanvasSize({
+                width: Math.round(width),
+                height: Math.round(height)
+            });
+        }
+      }
+    });
+
+    resizeObserver.observe(container);
+
+    // Cleanup function to stop observing when the component unmounts
     return () => {
-      window.removeEventListener('resize', updateCanvasSize);
+      resizeObserver.disconnect();
     };
-  }, []);
+  }, [isLoading]); // Re-run this effect after loading is complete to ensure container is ready
 
   const handleAddNode = async (type: NodeType) => {
-    const currentDiscussionId = useDiscussionsStore.getState().currentDiscussion?.id;
-    if (!currentDiscussionId) return;
+    if (!currentDiscussion) return;
 
     const centerX = (canvasSize.width / 2 - graphState.offset.x) / graphState.scale;
     const centerY = (canvasSize.height / 2 - graphState.offset.y) / graphState.scale;
@@ -73,7 +79,7 @@ export function DiscussionView({ discussion, onBack, onEdit }: DiscussionViewPro
       y: centerY - DEFAULT_NODE_SIZE.height / 2,
       width: DEFAULT_NODE_SIZE.width,
       height: DEFAULT_NODE_SIZE.height,
-      discussionId: currentDiscussionId
+      discussionId: currentDiscussion.id
     });
     
     setEditingNode(newNodeId);
@@ -120,7 +126,8 @@ export function DiscussionView({ discussion, onBack, onEdit }: DiscussionViewPro
   const canEdit = user?.id === currentDiscussion.creatorId;
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="h-full grid grid-rows-[auto_auto_1fr_auto] bg-gray-50">
+      {/* Row 1: Header */}
       <div className="bg-white border-b border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4 min-w-0">
@@ -170,15 +177,31 @@ export function DiscussionView({ discussion, onBack, onEdit }: DiscussionViewPro
         )}
       </div>
 
+      {/* Row 2: Toolbar */}
       <GraphToolbar onAddNode={handleAddNode} />
 
-      <div id="canvas-container" className="flex-1 relative">
-        <GraphCanvas width={canvasSize.width} height={canvasSize.height} />
+      {/* Row 3: Canvas Container (takes up all remaining space) */}
+      <div ref={canvasContainerRef} id="canvas-container" className="relative overflow-hidden">
+        {canvasSize.width > 0 && <GraphCanvas width={canvasSize.width} height={canvasSize.height} />}
       </div>
 
+      {/* Node Editor Modal - not part of the grid */}
       {graphState.isEditingNode && (
         <NodeEditor nodeId={graphState.isEditingNode} onClose={() => setEditingNode(undefined)} />
       )}
+      
+      {/* Row 4: Footer */}
+      <div className="bg-white border-t border-gray-200 px-4 py-2">
+        <div className="flex items-center justify-between text-sm text-gray-600">
+          <div className="flex items-center space-x-4">
+            <span>{graphState.nodes.length} nodes</span>
+            <span>{graphState.connections.length} connections</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span>Zoom: {Math.round(graphState.scale * 100)}%</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
