@@ -1,6 +1,3 @@
-import { Session } from "@supabase/supabase-js";
-
-
 export interface User {
   id: string;
   username: string;
@@ -71,12 +68,10 @@ export interface GraphState {
 
 export interface AuthState {
   user: User | null;
-  session: Session | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   register: (userData: Omit<User, 'id' | 'createdAt'> & { password: string }) => Promise<boolean>;
   logout: () => void;
-  _init: () => void;
 }
 
 export interface FriendsState {

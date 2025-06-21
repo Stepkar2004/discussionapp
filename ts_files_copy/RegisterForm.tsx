@@ -45,29 +45,27 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
   }, [watchEmail, setValue]);
 
   const onSubmit = async (data: RegisterFormData) => {
-      setIsLoading(true);
-      setError('');
+    setIsLoading(true);
+    setError('');
+    
+    try {
+      const success = await register({
+        email: data.email,
+        username: data.username,
+        displayName: data.displayName,
+        password: data.password
+      });
       
-      try {
-        // The register function in the store now expects the password
-        // and other data in a single object.
-        const success = await register({
-          email: data.email,
-          username: data.username,
-          displayName: data.displayName,
-          password: data.password
-        });
-        
-        if (success) {
-          onSuccess?.();
-        } else {
-          setError('An account with this email or username already exists. Please try another.');
-        }
-      } catch (err: any) {
-        setError(err.message || 'An error occurred. Please try again.');
-      } finally {
-        setIsLoading(false);
+      if (success) {
+        onSuccess?.();
+      } else {
+        setError('An account with this email or username already exists');
       }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
