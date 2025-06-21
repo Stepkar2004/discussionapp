@@ -1,7 +1,7 @@
 // src/stores/discussionsStore.ts
 
 import { create } from 'zustand';
-import { supabase } from '../lib/supabaseClient';
+import { getSupabase } from '../lib/supabaseClient';
 import { Discussion, GraphNode, NodeConnection, DiscussionsState, GraphState, NodeType } from '../types';
 import { useAuthStore } from './authStore';
 import { Database } from '../types/database.types';
@@ -63,18 +63,16 @@ export const useDiscussionsStore = create<DiscussionsState>()(
     graphState: initialGraphState,
 
     createDiscussion: async (discussionData) => {
-      console.log("--- createDiscussion called ---");
-
       console.log("Attempting to get session directly from Supabase...");
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await getSupabase().auth.getSession();
       
       if (sessionError) {
-        console.error("CRITICAL: supabase.auth.getSession() returned an error.", sessionError);
+        console.error("CRITICAL: getSupabase().auth.getSession() returned an error.", sessionError);
         throw new Error(`Authentication error: ${sessionError.message}`);
       }
       
       if (!session) {
-        console.error("CRITICAL: supabase.auth.getSession() returned a NULL session. The user is not truly logged in from the client's perspective.");
+        console.error("CRITICAL: getSupabase().auth.getSession() returned a NULL session. The user is not truly logged in from the client's perspective.");
         throw new Error("User must be logged in to create a discussion.");
       }
 
@@ -92,7 +90,7 @@ export const useDiscussionsStore = create<DiscussionsState>()(
 
       console.log("Preparing to insert the following data into 'discussions' table:", discussionToInsert);
       
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from('discussions')
         .insert(discussionToInsert)
         .select()
@@ -113,7 +111,7 @@ export const useDiscussionsStore = create<DiscussionsState>()(
 
 
     updateDiscussion: async (id, updates) => {
-        const { error } = await supabase
+        const { error } = await getSupabase()
             .from('discussions')
             .update({
                 title: updates.title,
@@ -140,7 +138,7 @@ export const useDiscussionsStore = create<DiscussionsState>()(
     },
     
     deleteDiscussion: async (id) => {
-        const { error } = await supabase.from('discussions').delete().eq('id', id);
+        const { error } = await getSupabase().from('discussions').delete().eq('id', id);
         if (error) {
             console.error("Error deleting discussion:", error);
             throw error;
@@ -152,7 +150,7 @@ export const useDiscussionsStore = create<DiscussionsState>()(
     },
 
     fetchDiscussions: async () => {
-        const { data, error } = await supabase.from('discussions').select('*').order('updated_at', { ascending: false });
+        const { data, error } = await getSupabase().from('discussions').select('*').order('updated_at', { ascending: false });
         if (error) {
             console.error("Error fetching discussions:", error);
             set({ discussions: [] });
@@ -165,9 +163,9 @@ export const useDiscussionsStore = create<DiscussionsState>()(
     loadDiscussion: async (id: string) => {
         set({ graphState: initialGraphState, currentDiscussion: null });
 
-        const discussionPromise = supabase.from('discussions').select('*').eq('id', id).single();
-        const nodesPromise = supabase.from('graph_nodes').select('*').eq('discussion_id', id);
-        const connectionsPromise = supabase.from('node_connections').select('*').eq('discussion_id', id);
+        const discussionPromise = getSupabase().from('discussions').select('*').eq('id', id).single();
+        const nodesPromise = getSupabase().from('graph_nodes').select('*').eq('discussion_id', id);
+        const connectionsPromise = getSupabase().from('node_connections').select('*').eq('discussion_id', id);
 
         const [
             { data: discussionData, error: discussionError },
@@ -192,7 +190,7 @@ export const useDiscussionsStore = create<DiscussionsState>()(
 
     // When we add a node, we pass camelCase data, so we must map it to snake_case for the DB insert
     addNode: async (nodeData) => {
-      const { data, error } = await supabase.from('graph_nodes').insert({
+      const { data, error } = await getSupabase().from('graph_nodes').insert({
           discussion_id: nodeData.discussionId,
           type: nodeData.type,
           content: nodeData.content,
@@ -218,7 +216,7 @@ export const useDiscussionsStore = create<DiscussionsState>()(
       delete dbUpdates.createdAt;
       delete dbUpdates.updatedAt;
 
-      const { data, error } = await supabase.from('graph_nodes').update(dbUpdates).eq('id', id).select().single();
+      const { data, error } = await getSupabase().from('graph_nodes').update(dbUpdates).eq('id', id).select().single();
       if (error) throw error;
 
       set(state => ({
@@ -227,7 +225,7 @@ export const useDiscussionsStore = create<DiscussionsState>()(
     },
 
     deleteNode: async (id) => {
-      const { error } = await supabase.from('graph_nodes').delete().eq('id', id);
+      const { error } = await getSupabase().from('graph_nodes').delete().eq('id', id);
       if (error) throw error;
       set(state => ({
         graphState: {
@@ -241,7 +239,7 @@ export const useDiscussionsStore = create<DiscussionsState>()(
 
     // Map to snake_case for DB insert
     addConnection: async (connectionData) => {
-      const { data, error } = await supabase.from('node_connections').insert({
+      const { data, error } = await getSupabase().from('node_connections').insert({
           discussion_id: connectionData.discussionId,
           from_node_id: connectionData.fromNodeId,
           to_node_id: connectionData.toNodeId,
@@ -254,7 +252,7 @@ export const useDiscussionsStore = create<DiscussionsState>()(
     },
     
     deleteConnection: async (id: string) => {
-        const { error } = await supabase.from('node_connections').delete().eq('id', id);
+        const { error } = await getSupabase().from('node_connections').delete().eq('id', id);
         if (error) throw error;
         set(state => ({
             graphState: {

@@ -77,6 +77,7 @@ export interface AuthState {
   register: (userData: Omit<User, 'id' | 'createdAt'> & { password: string }) => Promise<boolean>;
   logout: () => void;
   _init: () => void;
+  //revalidateSession: () => Promise<void>;
 }
 
 export interface FriendsState {

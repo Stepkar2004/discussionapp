@@ -32,7 +32,6 @@ function App() {
     const loadInitialData = async () => {
       if (isAuthenticated) {
         setIsAppLoading(true);
-        // Fetch all discussions for the dashboard/list view
         await fetchDiscussions(); 
         
         const urlParams = new URLSearchParams(window.location.search);
@@ -55,6 +54,7 @@ function App() {
     loadInitialData();
   }, [isAuthenticated, loadDiscussion, fetchDiscussions]);
 
+  // ... rest of the file is unchanged ...
   // Update URL when viewing a discussion
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -81,7 +81,6 @@ function App() {
     setShowDiscussionForm(false);
     setEditingDiscussion(null);
     
-    // Load and view the new/updated discussion
     await loadDiscussion(discussionId);
     const discussion = useDiscussionsStore.getState().currentDiscussion;
     if (discussion) {
@@ -111,12 +110,10 @@ function App() {
     }
   };
 
-  // Show authentication page if not logged in
   if (!isAuthenticated && !isAppLoading) {
     return <AuthPage onAuthSuccess={() => setCurrentView('dashboard')} />;
   }
 
-  // Show a global loading spinner while checking auth or loading initial data
   if (isAppLoading) {
       return (
           <div className="h-screen w-screen flex items-center justify-center bg-gray-50">

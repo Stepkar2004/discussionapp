@@ -1,116 +1,103 @@
 // src/stores/authStore.ts
 
 import { create } from 'zustand';
-import { supabase } from '../lib/supabaseClient';
-import { User, AuthState } from '../types';
+import { getSupabase } from '../lib/supabaseClient';
+import { User, AuthState, Session } from '../types';
 
-export const useAuthStore = create<AuthState>()((set, get) => ({
+export const useAuthStore = create<AuthState>()((set) => ({
   user: null,
   session: null,
   isAuthenticated: false,
 
   login: async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await getSupabase().auth.signInWithPassword({ email, password });
     if (error) {
       console.error('Login Error:', error.message);
       return false;
     }
-    // Auth state change will be handled by the listener
-    return true;
+    return true; // The listener will handle the UI update
   },
 
   register: async (userData) => {
     const { email, password, username, displayName } = userData;
-    const { error } = await supabase.auth.signUp({
+    const { error } = await getSupabase().auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          username: username.toLowerCase(),
-          displayName: displayName,
-          // We can add a default avatar later if we want
-          // avatar_url: `https://...`
-        },
-      },
+      options: { data: { username: username.toLowerCase(), displayName } },
     });
-
     if (error) {
       console.error('Registration Error:', error.message);
       return false;
     }
-    // Auth state change will be handled by the listener
-    return true;
+    return true; // The listener will handle the UI update
   },
 
   logout: async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error('Logout Error:', error.message);
-    }
-    // The listener will handle setting state to logged-out
+    await getSupabase().auth.signOut();
+    // The listener will handle the UI update
   },
 
-  _init: async () => {
-    // This handles the case where the user is already logged in
-    // when the application loads.
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
-
-      if (profile) {
-        set({ 
-          isAuthenticated: true, 
-          user: {
-            id: profile.id,
-            username: profile.username,
-            email: session.user.email!, // Email is from the secure user object
-            displayName: profile.display_name,
-            avatar: profile.avatar_url,
-            createdAt: profile.created_at,
-          }, 
-          session 
-        });
-      }
-    }
-
-    // This is the main listener for auth changes.
-    supabase.auth.onAuthStateChange(async (_event, session) => {
+  _init: () => {
+    // --- The Listener is now "Fire and Forget" ---
+    getSupabase().auth.onAuthStateChange((_event, session) => {
       if (session) {
-        // User is logged in
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (profile) {
-            set({ 
-                isAuthenticated: true, 
-                user: {
-                  id: profile.id,
-                  username: profile.username,
-                  email: session.user.email!,
-                  displayName: profile.display_name,
-                  avatar: profile.avatar_url,
-                  createdAt: profile.created_at,
-                }, 
-                session 
-            });
-        }
+        // We have a session. Kick off the process to get the profile and update state.
+        // DO NOT await this. Let it run in the background.
+        // This prevents the listener from deadlocking the Supabase client.
+        (async () => {
+          const { data: profile } = await getSupabase()
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+          
+          if (profile) {
+              set({ 
+                  isAuthenticated: true, 
+                  user: {
+                    id: profile.id,
+                    username: profile.username,
+                    email: session.user.email!,
+                    displayName: profile.display_name || '',
+                    avatar: profile.avatar_url || undefined,
+                    createdAt: profile.created_at,
+                  }, 
+                  session 
+              });
+          } else {
+              // Profile is missing, something is wrong. Log out.
+              await getSupabase().auth.signOut();
+          }
+        })();
       } else {
-        // User is logged out
+        // Session is null, user is logged out. This is a synchronous state update.
         set({ isAuthenticated: false, user: null, session: null });
       }
     });
+
+    // We still need an initial check for the very first page load, as the listener might
+    // not fire for an existing session right away.
+    (async () => {
+        const { data: { session } } = await getSupabase().auth.getSession();
+        if (session) {
+            const { data: profile } = await getSupabase().from('profiles').select('*').eq('id', session.user.id).single();
+            if (profile) {
+                set({ 
+                    isAuthenticated: true, 
+                    user: {
+                        id: profile.id,
+                        username: profile.username,
+                        email: session.user.email!,
+                        displayName: profile.display_name || '',
+                        avatar: profile.avatar_url || undefined,
+                        createdAt: profile.created_at,
+                    }, 
+                    session 
+                });
+            }
+        }
+    })();
   },
 }));
 
-// Initialize the auth listener when the app starts
 useAuthStore.getState()._init();
