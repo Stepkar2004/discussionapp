@@ -152,7 +152,7 @@ function App() {
   } else {
     switch (currentView) {
       case 'dashboard':
-        mainContent = <Dashboard onCreateDiscussion={handleCreateDiscussion} onViewDiscussion={handleSelectDiscussion} onViewFriends={() => handleViewChange('friends')} />;
+        mainContent = <Dashboard onCreateDiscussion={handleCreateDiscussion} onViewDiscussion={handleSelectDiscussion} onViewFriends={() => handleViewChange('friends') } onViewChange={handleViewChange} />;
         break;
       case 'friends':
         mainContent = <FriendsPage />;
@@ -164,7 +164,7 @@ function App() {
         mainContent = <SettingsPage />;
         break;
       default:
-        mainContent = <Dashboard onCreateDiscussion={handleCreateDiscussion} onViewDiscussion={handleSelectDiscussion} onViewFriends={() => handleViewChange('friends')} />;
+        mainContent = <Dashboard onCreateDiscussion={handleCreateDiscussion} onViewDiscussion={handleSelectDiscussion} onViewFriends={() => handleViewChange('friends')} onViewChange={handleViewChange} />;
     }
   }
 
