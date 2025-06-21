@@ -1,5 +1,5 @@
 import { Session } from "@supabase/supabase-js";
-
+export type { Session }; // This is the fix
 
 export interface User {
   id: string;
@@ -92,15 +92,16 @@ export interface DiscussionsState {
   discussions: Discussion[];
   currentDiscussion: Discussion | null;
   graphState: GraphState;
-  createDiscussion: (discussion: Omit<Discussion, 'id' | 'createdAt' | 'updatedAt'>) => string;
-  updateDiscussion: (id: string, updates: Partial<Discussion>) => void;
-  deleteDiscussion: (id: string) => void;
-  loadDiscussion: (id: string) => void;
-  addNode: (node: Omit<GraphNode, 'id' | 'createdAt' | 'updatedAt'>) => string;
-  updateNode: (id: string, updates: Partial<GraphNode>) => void;
-  deleteNode: (id: string) => void;
-  addConnection: (connection: Omit<NodeConnection, 'id' | 'createdAt'>) => string;
-  deleteConnection: (id: string) => void;
+  createDiscussion: (discussion: Omit<Discussion, 'id' | 'creatorId' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateDiscussion: (id: string, updates: Partial<Discussion>) => Promise<void>;
+  deleteDiscussion: (id: string) => Promise<void>;
+  fetchDiscussions: () => Promise<void>;
+  loadDiscussion: (id: string) => Promise<void>;
+  addNode: (node: Omit<GraphNode, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateNode: (id: string, updates: Partial<GraphNode>) => Promise<void>;
+  deleteNode: (id: string) => Promise<void>;
+  addConnection: (connection: Omit<NodeConnection, 'id' | 'createdAt'>) => Promise<string>;
+  deleteConnection: (id: string) => Promise<void>;
   setSelectedNode: (nodeId?: string) => void;
   setEditingNode: (nodeId?: string) => void;
   updateGraphView: (updates: Partial<Pick<GraphState, 'scale' | 'offset'>>) => void;

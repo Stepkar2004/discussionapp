@@ -1,3 +1,5 @@
+// src/App.tsx
+
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from './stores/authStore';
 import { AuthPage } from './components/auth/AuthPage';
@@ -17,44 +19,53 @@ type ViewType = 'dashboard' | 'discussions' | 'friends' | 'profile' | 'settings'
 
 function App() {
   const { isAuthenticated } = useAuthStore();
-  const { loadDiscussion } = useDiscussionsStore();
+  const { loadDiscussion, fetchDiscussions } = useDiscussionsStore();
   
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [selectedDiscussion, setSelectedDiscussion] = useState<Discussion | null>(null);
   const [showDiscussionForm, setShowDiscussionForm] = useState(false);
   const [editingDiscussion, setEditingDiscussion] = useState<Discussion | null>(null);
+  const [isAppLoading, setIsAppLoading] = useState(true);
 
-  // Handle URL parameters on load
+  // Handle URL parameters and initial data fetching
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const discussionId = urlParams.get('discussion');
-    
-    if (discussionId && isAuthenticated) {
-      const { discussions } = useDiscussionsStore.getState();
-      const discussion = discussions.find(d => d.id === discussionId);
-      if (discussion) {
-        setSelectedDiscussion(discussion);
-        setCurrentView('discussions');
+    const loadInitialData = async () => {
+      if (isAuthenticated) {
+        setIsAppLoading(true);
+        // Fetch all discussions for the dashboard/list view
+        await fetchDiscussions(); 
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const discussionId = urlParams.get('discussion');
+        
+        if (discussionId) {
+          await loadDiscussion(discussionId);
+          const discussion = useDiscussionsStore.getState().currentDiscussion;
+          if (discussion) {
+            setSelectedDiscussion(discussion);
+            setCurrentView('discussions');
+          }
+        }
+        setIsAppLoading(false);
+      } else {
+        setIsAppLoading(false);
       }
-    }
-  }, [isAuthenticated]);
+    };
+
+    loadInitialData();
+  }, [isAuthenticated, loadDiscussion, fetchDiscussions]);
 
   // Update URL when viewing a discussion
   useEffect(() => {
+    const url = new URL(window.location.href);
     if (selectedDiscussion) {
-      const url = new URL(window.location.href);
       url.searchParams.set('discussion', selectedDiscussion.id);
       window.history.replaceState({}, '', url.toString());
     } else {
-      const url = new URL(window.location.href);
       url.searchParams.delete('discussion');
       window.history.replaceState({}, '', url.toString());
     }
   }, [selectedDiscussion]);
-
-  const handleAuthSuccess = () => {
-    setCurrentView('dashboard');
-  };
 
   const handleCreateDiscussion = () => {
     setEditingDiscussion(null);
@@ -66,13 +77,13 @@ function App() {
     setShowDiscussionForm(true);
   };
 
-  const handleDiscussionFormSuccess = (discussionId: string) => {
+  const handleDiscussionFormSuccess = async (discussionId: string) => {
     setShowDiscussionForm(false);
     setEditingDiscussion(null);
     
-    // Load and view the discussion
-    const { discussions } = useDiscussionsStore.getState();
-    const discussion = discussions.find(d => d.id === discussionId);
+    // Load and view the new/updated discussion
+    await loadDiscussion(discussionId);
+    const discussion = useDiscussionsStore.getState().currentDiscussion;
     if (discussion) {
       setSelectedDiscussion(discussion);
       setCurrentView('discussions');
@@ -100,16 +111,20 @@ function App() {
     }
   };
 
-  const handleViewFriends = () => {
-    setCurrentView('friends');
-  };
-
   // Show authentication page if not logged in
-  if (!isAuthenticated) {
-    return <AuthPage onAuthSuccess={handleAuthSuccess} />;
+  if (!isAuthenticated && !isAppLoading) {
+    return <AuthPage onAuthSuccess={() => setCurrentView('dashboard')} />;
   }
 
-  // Render discussion form modal
+  // Show a global loading spinner while checking auth or loading initial data
+  if (isAppLoading) {
+      return (
+          <div className="h-screen w-screen flex items-center justify-center bg-gray-50">
+              <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+          </div>
+      );
+  }
+
   const discussionFormModal = showDiscussionForm && (
     <DiscussionForm
       discussion={editingDiscussion || undefined}
@@ -118,9 +133,7 @@ function App() {
     />
   );
 
-  // Render main content based on current view
   let mainContent: React.ReactNode;
-
   if (currentView === 'discussions') {
     if (selectedDiscussion) {
       mainContent = (
@@ -142,13 +155,7 @@ function App() {
   } else {
     switch (currentView) {
       case 'dashboard':
-        mainContent = (
-          <Dashboard
-            onCreateDiscussion={handleCreateDiscussion}
-            onViewDiscussion={handleSelectDiscussion}
-            onViewFriends={handleViewFriends}
-          />
-        );
+        mainContent = <Dashboard onCreateDiscussion={handleCreateDiscussion} onViewDiscussion={handleSelectDiscussion} onViewFriends={() => handleViewChange('friends')} />;
         break;
       case 'friends':
         mainContent = <FriendsPage />;
@@ -160,13 +167,7 @@ function App() {
         mainContent = <SettingsPage />;
         break;
       default:
-        mainContent = (
-          <Dashboard
-            onCreateDiscussion={handleCreateDiscussion}
-            onViewDiscussion={handleSelectDiscussion}
-            onViewFriends={handleViewFriends}
-          />
-        );
+        mainContent = <Dashboard onCreateDiscussion={handleCreateDiscussion} onViewDiscussion={handleSelectDiscussion} onViewFriends={() => handleViewChange('friends')} />;
     }
   }
 

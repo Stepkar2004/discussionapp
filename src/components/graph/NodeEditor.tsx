@@ -1,3 +1,5 @@
+// src/components/graph/NodeEditor.tsx
+
 import React, { useState, useEffect } from 'react';
 import { X, Save, Type, Palette } from 'lucide-react';
 import { NodeType } from '../../types';
@@ -25,13 +27,20 @@ export function NodeEditor({ nodeId, onClose }: NodeEditorProps) {
     }
   }, [node]);
 
-  const handleSave = () => {
-    if (node) {
-      updateNode(nodeId, {
-        content: content.trim(),
-        type: nodeType
-      });
-      onClose();
+  const handleSave = async () => {
+    if (node && (content !== node.content || nodeType !== node.type)) {
+      try {
+        await updateNode(nodeId, {
+          content: content.trim(),
+          type: nodeType
+        });
+        onClose();
+      } catch (error) {
+          console.error("Failed to update node:", error);
+          // Optional: Add user-facing error message
+      }
+    } else {
+        onClose();
     }
   };
 
@@ -61,112 +70,67 @@ export function NodeEditor({ nodeId, onClose }: NodeEditorProps) {
   const currentTypeConfig = NODE_TYPES.find(t => t.type === nodeType) || NODE_TYPES[0];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onKeyDown={handleKeyDown}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200" style={{ backgroundColor: `${currentTypeConfig.color}1A` }}>
           <div className="flex items-center space-x-2">
-            <div
-              className="w-6 h-6 rounded-full"
-              style={{ backgroundColor: currentTypeConfig.color }}
-            />
+            <div className="w-6 h-6 rounded-full" style={{ backgroundColor: currentTypeConfig.color }} />
             <h3 className="text-lg font-semibold text-gray-900">Edit Node</h3>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-          >
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-4 space-y-4">
-          {/* Node Type Selection */}
           <div>
             <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
               <Type className="w-4 h-4" />
               <span>Node Type</span>
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {NODE_TYPES.map((type) => (
                 <button
                   key={type.type}
                   onClick={() => handleTypeChange(type.type)}
-                  className={`flex items-center space-x-2 p-3 rounded-lg border transition-colors ${
+                  className={`flex items-center space-x-2 p-2 rounded-lg border transition-colors ${
                     nodeType === type.type
-                      ? 'border-blue-500 bg-blue-50'
+                      ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                   }`}
                 >
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: type.color }}
-                  />
-                  <span className="text-sm">{type.icon}</span>
+                  <span className="text-lg">{type.icon}</span>
                   <span className="text-xs font-medium truncate">{type.label}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Content Editor */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="node-content" className="block text-sm font-medium text-gray-700 mb-2">
               Content
             </label>
             <textarea
+              id="node-content"
               value={content}
               onChange={(e) => handleContentChange(e.target.value)}
-              onKeyDown={handleKeyDown}
               className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
               placeholder="Enter the content for this node..."
               autoFocus
+              maxLength={500}
             />
-            <div className="mt-1 text-xs text-gray-500">
-              {content.length}/500 characters
-            </div>
-          </div>
-
-          {/* Preview */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Preview
-            </label>
-            <div
-              className="p-3 rounded-lg border-2 border-dashed"
-              style={{ borderColor: currentTypeConfig.color, backgroundColor: `${currentTypeConfig.color}10` }}
-            >
-              <div className="flex items-start space-x-2">
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-white text-sm"
-                  style={{ backgroundColor: currentTypeConfig.color }}
-                >
-                  {currentTypeConfig.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 mb-1">
-                    {currentTypeConfig.label}
-                  </div>
-                  <div className="text-sm text-gray-700 break-words">
-                    {content || 'Enter content above...'}
-                  </div>
-                </div>
-              </div>
+            <div className="mt-1 text-xs text-right text-gray-500">
+              {content.length}/500
             </div>
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
           <div className="text-xs text-gray-500">
-            Ctrl/Cmd + Enter to save quickly
+            Press <kbd className="px-1.5 py-0.5 border border-gray-300 bg-gray-100 rounded-md">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 border border-gray-300 bg-gray-100 rounded-md">Enter</kbd> to save.
           </div>
           <div className="flex items-center space-x-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-            >
+            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
               Cancel
             </button>
             <button

@@ -1,8 +1,15 @@
+// src/stores/discussionsStore.ts
+
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { v4 as uuidv4 } from 'uuid';
-import { Discussion, GraphNode, NodeConnection, DiscussionsState, GraphState } from '../types';
+import { supabase } from '../lib/supabaseClient';
+import { Discussion, GraphNode, NodeConnection, DiscussionsState, GraphState, NodeType } from '../types';
 import { useAuthStore } from './authStore';
+import { Database } from '../types/database.types';
+
+// Define the types for our table rows for type safety
+type DiscussionRow = Database['public']['Tables']['discussions']['Row'];
+type GraphNodeRow = Database['public']['Tables']['graph_nodes']['Row'];
+type ConnectionRow = Database['public']['Tables']['node_connections']['Row'];
 
 const initialGraphState: GraphState = {
   nodes: [],
@@ -13,198 +20,254 @@ const initialGraphState: GraphState = {
   offset: { x: 0, y: 0 }
 };
 
+// --- MAPPING HELPERS to convert from snake_case (DB) to camelCase (Frontend) ---
+
+const mapDiscussionRowToDiscussion = (row: DiscussionRow): Discussion => ({
+    id: row.id,
+    title: row.title,
+    description: row.description || '',
+    creatorId: row.creator_id,
+    privacy: row.privacy as 'public' | 'private' | 'friends',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    tags: row.tags || undefined,
+});
+
+const mapGraphNodeRowToGraphNode = (row: GraphNodeRow): GraphNode => ({
+    id: row.id,
+    type: row.type as NodeType,
+    content: row.content,
+    x: row.x,
+    y: row.y,
+    width: row.width,
+    height: row.height,
+    discussionId: row.discussion_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+});
+
+const mapConnectionRowToNodeConnection = (row: ConnectionRow): NodeConnection => ({
+    id: row.id,
+    fromNodeId: row.from_node_id,
+    toNodeId: row.to_node_id,
+    relationshipType: row.relationship_type as NodeConnection['relationshipType'],
+    discussionId: row.discussion_id,
+    createdAt: row.created_at,
+});
+
+
 export const useDiscussionsStore = create<DiscussionsState>()(
-  persist(
-    (set, get) => ({
-      discussions: [],
-      currentDiscussion: null,
-      graphState: initialGraphState,
+  (set, get) => ({
+    discussions: [],
+    currentDiscussion: null,
+    graphState: initialGraphState,
 
-      createDiscussion: (discussionData: Omit<Discussion, 'id' | 'createdAt' | 'updatedAt'>): string => {
-        const newDiscussion: Discussion = {
-          ...discussionData,
-          id: uuidv4(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
+    createDiscussion: async (discussionData) => {
+      console.log("--- createDiscussion called ---");
+
+      console.log("Attempting to get session directly from Supabase...");
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error("CRITICAL: supabase.auth.getSession() returned an error.", sessionError);
+        throw new Error(`Authentication error: ${sessionError.message}`);
+      }
+      
+      if (!session) {
+        console.error("CRITICAL: supabase.auth.getSession() returned a NULL session. The user is not truly logged in from the client's perspective.");
+        throw new Error("User must be logged in to create a discussion.");
+      }
+
+      console.log("Session successfully retrieved. User ID:", session.user.id);
+      console.log("User Email:", session.user.email);
+      console.log("Is session expired?", session.expires_at ? (session.expires_at * 1000) < Date.now() : 'N/A');
+
+      const discussionToInsert = {
+        title: discussionData.title,
+        description: discussionData.description,
+        creator_id: session.user.id, // Use the ID from the fresh session
+        privacy: discussionData.privacy,
+        tags: discussionData.tags
+      };
+
+      console.log("Preparing to insert the following data into 'discussions' table:", discussionToInsert);
+      
+      const { data, error } = await supabase
+        .from('discussions')
+        .insert(discussionToInsert)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error("DATABASE INSERT FAILED. The RLS policy was violated. Error details:", error);
+        // This log will show the exact error from Postgres
+        throw error;
+      }
+      
+      console.log("--- createDiscussion successfully completed. ---");
+      const newDiscussion = mapDiscussionRowToDiscussion(data);
+      set(state => ({ discussions: [...state.discussions, newDiscussion] }));
+
+      return newDiscussion.id;
+    },
+
+
+    updateDiscussion: async (id, updates) => {
+        const { error } = await supabase
+            .from('discussions')
+            .update({
+                title: updates.title,
+                description: updates.description,
+                privacy: updates.privacy,
+                tags: updates.tags,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        if (error) {
+            console.error("Error updating discussion:", error);
+            throw error;
+        }
 
         set(state => ({
-          discussions: [...state.discussions, newDiscussion]
-        }));
-
-        return newDiscussion.id;
-      },
-
-      updateDiscussion: (id: string, updates: Partial<Discussion>) => {
-        set(state => ({
-          discussions: state.discussions.map(discussion =>
-            discussion.id === id
-              ? { ...discussion, ...updates, updatedAt: new Date().toISOString() }
-              : discussion
+          discussions: state.discussions.map(d =>
+            d.id === id ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d
           ),
           currentDiscussion: state.currentDiscussion?.id === id
             ? { ...state.currentDiscussion, ...updates, updatedAt: new Date().toISOString() }
             : state.currentDiscussion
         }));
-      },
-
-      deleteDiscussion: (id: string) => {
+    },
+    
+    deleteDiscussion: async (id) => {
+        const { error } = await supabase.from('discussions').delete().eq('id', id);
+        if (error) {
+            console.error("Error deleting discussion:", error);
+            throw error;
+        }
         set(state => ({
-          discussions: state.discussions.filter(discussion => discussion.id !== id),
-          currentDiscussion: state.currentDiscussion?.id === id ? null : state.currentDiscussion,
-          graphState: state.currentDiscussion?.id === id ? initialGraphState : state.graphState
+            discussions: state.discussions.filter(d => d.id !== id),
+            currentDiscussion: state.currentDiscussion?.id === id ? null : state.currentDiscussion,
         }));
-      },
+    },
 
-      loadDiscussion: (id: string) => {
-        const discussion = get().discussions.find(d => d.id === id);
-        if (!discussion) return;
+    fetchDiscussions: async () => {
+        const { data, error } = await supabase.from('discussions').select('*').order('updated_at', { ascending: false });
+        if (error) {
+            console.error("Error fetching discussions:", error);
+            set({ discussions: [] });
+            return;
+        }
+        const mappedDiscussions = data.map(mapDiscussionRowToDiscussion);
+        set({ discussions: mappedDiscussions });
+    },
 
-        // Load graph data for this discussion
-        const allGraphData = JSON.parse(localStorage.getItem('discussion-app-graphs') || '{}');
-        const discussionGraphData = allGraphData[id] || { nodes: [], connections: [] };
+    loadDiscussion: async (id: string) => {
+        set({ graphState: initialGraphState, currentDiscussion: null });
+
+        const discussionPromise = supabase.from('discussions').select('*').eq('id', id).single();
+        const nodesPromise = supabase.from('graph_nodes').select('*').eq('discussion_id', id);
+        const connectionsPromise = supabase.from('node_connections').select('*').eq('discussion_id', id);
+
+        const [
+            { data: discussionData, error: discussionError },
+            { data: nodesData, error: nodesError },
+            { data: connectionsData, error: connectionsError }
+        ] = await Promise.all([discussionPromise, nodesPromise, connectionsPromise]);
+
+        if (discussionError || nodesError || connectionsError) {
+            console.error("Error loading discussion data:", { discussionError, nodesError, connectionsError });
+            return;
+        }
 
         set({
-          currentDiscussion: discussion,
-          graphState: {
-            ...initialGraphState,
-            nodes: discussionGraphData.nodes || [],
-            connections: discussionGraphData.connections || []
-          }
+            currentDiscussion: mapDiscussionRowToDiscussion(discussionData),
+            graphState: {
+                ...initialGraphState,
+                nodes: nodesData.map(mapGraphNodeRowToGraphNode), // <-- FIX
+                connections: connectionsData.map(mapConnectionRowToNodeConnection), // <-- FIX
+            }
         });
-      },
+    },
 
-      addNode: (nodeData: Omit<GraphNode, 'id' | 'createdAt' | 'updatedAt'>): string => {
-        const newNode: GraphNode = {
-          ...nodeData,
-          id: uuidv4(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
+    // When we add a node, we pass camelCase data, so we must map it to snake_case for the DB insert
+    addNode: async (nodeData) => {
+      const { data, error } = await supabase.from('graph_nodes').insert({
+          discussion_id: nodeData.discussionId,
+          type: nodeData.type,
+          content: nodeData.content,
+          x: nodeData.x,
+          y: nodeData.y,
+          width: nodeData.width,
+          height: nodeData.height
+      }).select().single();
+      if (error) throw error;
 
+      set(state => ({ graphState: { ...state.graphState, nodes: [...state.graphState.nodes, mapGraphNodeRowToGraphNode(data)] }})); // <-- FIX
+      return data.id;
+    },
+
+    // Map the updates to snake_case for the DB
+    updateNode: async (id, updates) => {
+      const dbUpdates = {
+          ...updates,
+          discussion_id: updates.discussionId,
+          updated_at: new Date().toISOString()
+      };
+      delete dbUpdates.discussionId; // remove camelCase key
+      delete dbUpdates.createdAt;
+      delete dbUpdates.updatedAt;
+
+      const { data, error } = await supabase.from('graph_nodes').update(dbUpdates).eq('id', id).select().single();
+      if (error) throw error;
+
+      set(state => ({
+        graphState: { ...state.graphState, nodes: state.graphState.nodes.map(n => n.id === id ? mapGraphNodeRowToGraphNode(data) : n) } // <-- FIX
+      }));
+    },
+
+    deleteNode: async (id) => {
+      const { error } = await supabase.from('graph_nodes').delete().eq('id', id);
+      if (error) throw error;
+      set(state => ({
+        graphState: {
+          ...state.graphState,
+          nodes: state.graphState.nodes.filter(n => n.id !== id),
+          connections: state.graphState.connections.filter(c => c.fromNodeId !== id && c.toNodeId !== id),
+          selectedNodeId: state.graphState.selectedNodeId === id ? undefined : state.graphState.selectedNodeId,
+        }
+      }));
+    },
+
+    // Map to snake_case for DB insert
+    addConnection: async (connectionData) => {
+      const { data, error } = await supabase.from('node_connections').insert({
+          discussion_id: connectionData.discussionId,
+          from_node_id: connectionData.fromNodeId,
+          to_node_id: connectionData.toNodeId,
+          relationship_type: connectionData.relationshipType
+      }).select().single();
+      if (error) throw error;
+      
+      set(state => ({ graphState: { ...state.graphState, connections: [...state.graphState.connections, mapConnectionRowToNodeConnection(data)] }})); // <-- FIX
+      return data.id;
+    },
+    
+    deleteConnection: async (id: string) => {
+        const { error } = await supabase.from('node_connections').delete().eq('id', id);
+        if (error) throw error;
         set(state => ({
-          graphState: {
-            ...state.graphState,
-            nodes: [...state.graphState.nodes, newNode]
-          }
+            graphState: {
+                ...state.graphState,
+                connections: state.graphState.connections.filter(c => c.id !== id)
+            }
         }));
+    },
+    
+    setSelectedNode: (nodeId) => set(state => ({ graphState: { ...state.graphState, selectedNodeId: nodeId }})),
+    setEditingNode: (nodeId) => set(state => ({ graphState: { ...state.graphState, isEditingNode: nodeId }})),
+    updateGraphView: (updates) => set(state => ({ graphState: { ...state.graphState, ...updates }})),
 
-        // Persist graph data
-        get().saveGraphData();
-        return newNode.id;
-      },
-
-      updateNode: (id: string, updates: Partial<GraphNode>) => {
-        set(state => ({
-          graphState: {
-            ...state.graphState,
-            nodes: state.graphState.nodes.map(node =>
-              node.id === id
-                ? { ...node, ...updates, updatedAt: new Date().toISOString() }
-                : node
-            )
-          }
-        }));
-
-        // Persist graph data
-        get().saveGraphData();
-      },
-
-      deleteNode: (id: string) => {
-        set(state => ({
-          graphState: {
-            ...state.graphState,
-            nodes: state.graphState.nodes.filter(node => node.id !== id),
-            connections: state.graphState.connections.filter(
-              conn => conn.fromNodeId !== id && conn.toNodeId !== id
-            ),
-            selectedNodeId: state.graphState.selectedNodeId === id ? undefined : state.graphState.selectedNodeId,
-            isEditingNode: state.graphState.isEditingNode === id ? undefined : state.graphState.isEditingNode
-          }
-        }));
-
-        // Persist graph data
-        get().saveGraphData();
-      },
-
-      addConnection: (connectionData: Omit<NodeConnection, 'id' | 'createdAt'>): string => {
-        const newConnection: NodeConnection = {
-          ...connectionData,
-          id: uuidv4(),
-          createdAt: new Date().toISOString()
-        };
-
-        set(state => ({
-          graphState: {
-            ...state.graphState,
-            connections: [...state.graphState.connections, newConnection]
-          }
-        }));
-
-        // Persist graph data
-        get().saveGraphData();
-        return newConnection.id;
-      },
-
-      deleteConnection: (id: string) => {
-        set(state => ({
-          graphState: {
-            ...state.graphState,
-            connections: state.graphState.connections.filter(conn => conn.id !== id)
-          }
-        }));
-
-        // Persist graph data
-        get().saveGraphData();
-      },
-
-      setSelectedNode: (nodeId?: string) => {
-        set(state => ({
-          graphState: {
-            ...state.graphState,
-            selectedNodeId: nodeId
-          }
-        }));
-      },
-
-      setEditingNode: (nodeId?: string) => {
-        set(state => ({
-          graphState: {
-            ...state.graphState,
-            isEditingNode: nodeId
-          }
-        }));
-      },
-
-      updateGraphView: (updates: Partial<Pick<GraphState, 'scale' | 'offset'>>) => {
-        set(state => ({
-          graphState: {
-            ...state.graphState,
-            ...updates
-          }
-        }));
-      },
-
-      // Helper method to persist graph data
-      saveGraphData: () => {
-        const state = get();
-        if (!state.currentDiscussion) return;
-
-        const allGraphData = JSON.parse(localStorage.getItem('discussion-app-graphs') || '{}');
-        allGraphData[state.currentDiscussion.id] = {
-          nodes: state.graphState.nodes,
-          connections: state.graphState.connections
-        };
-        localStorage.setItem('discussion-app-graphs', JSON.stringify(allGraphData));
-      }
-    }),
-    {
-      name: 'discussion-app-discussions',
-      partialize: (state) => ({
-        discussions: state.discussions
-      })
-    }
-  )
+    saveGraphData: () => {},
+  })
 );
-
-

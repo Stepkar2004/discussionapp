@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+// src/components/discussions/DiscussionList.tsx
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Plus, Filter, Globe, Users, Lock, Calendar, MessageSquare, MoreVertical, Edit, Trash2 } from 'lucide-react';
 import { Discussion } from '../../types';
 import { useDiscussionsStore } from '../../stores/discussionsStore';
@@ -19,12 +21,24 @@ export function DiscussionList({ onCreateNew, onSelectDiscussion, onEditDiscussi
   const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [filterBy, setFilterBy] = useState<FilterOption>('all');
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
-  const { discussions, deleteDiscussion } = useDiscussionsStore();
+  const { discussions, deleteDiscussion, fetchDiscussions } = useDiscussionsStore();
   const { user } = useAuthStore();
+
+  useEffect(() => {
+    const loadDiscussions = async () => {
+      setIsLoading(true);
+      await fetchDiscussions();
+      setIsLoading(false);
+    };
+    loadDiscussions();
+  }, [fetchDiscussions]);
 
   // Get stored users for creator names
   const storedUsers = useMemo(() => {
+    // In a real app with a full backend, you'd fetch this or have it pre-loaded.
+    // For now, continuing with localStorage for display names is a reasonable stop-gap.
     const users = JSON.parse(localStorage.getItem('discussion-app-users') || '[]');
     const mockUsers = [
       {
@@ -40,7 +54,6 @@ export function DiscussionList({ onCreateNew, onSelectDiscussion, onEditDiscussi
   const filteredAndSortedDiscussions = useMemo(() => {
     let filtered = discussions;
 
-    // Apply text search
     if (searchQuery.trim()) {
       filtered = filtered.filter(discussion =>
         searchInText(discussion.title, searchQuery) ||
@@ -49,7 +62,6 @@ export function DiscussionList({ onCreateNew, onSelectDiscussion, onEditDiscussi
       );
     }
 
-    // Apply filters
     switch (filterBy) {
       case 'public':
         filtered = filtered.filter(d => d.privacy === 'public');
@@ -65,7 +77,6 @@ export function DiscussionList({ onCreateNew, onSelectDiscussion, onEditDiscussi
         break;
     }
 
-    // Apply sorting
     switch (sortBy) {
       case 'recent':
         filtered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -83,14 +94,10 @@ export function DiscussionList({ onCreateNew, onSelectDiscussion, onEditDiscussi
 
   const getPrivacyIcon = (privacy: string) => {
     switch (privacy) {
-      case 'public':
-        return <Globe className="w-4 h-4 text-green-600" />;
-      case 'friends':
-        return <Users className="w-4 h-4 text-blue-600" />;
-      case 'private':
-        return <Lock className="w-4 h-4 text-gray-600" />;
-      default:
-        return <Globe className="w-4 h-4 text-green-600" />;
+      case 'public': return <Globe className="w-4 h-4 text-green-600" />;
+      case 'friends': return <Users className="w-4 h-4 text-blue-600" />;
+      case 'private': return <Lock className="w-4 h-4 text-gray-600" />;
+      default: return <Globe className="w-4 h-4 text-green-600" />;
     }
   };
 
@@ -99,10 +106,16 @@ export function DiscussionList({ onCreateNew, onSelectDiscussion, onEditDiscussi
     return creator?.displayName || creator?.username || 'Unknown User';
   };
 
-  const handleDeleteDiscussion = (discussion: Discussion, e: React.MouseEvent) => {
+  const handleDeleteDiscussion = async (discussion: Discussion, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm(`Are you sure you want to delete "${discussion.title}"? This action cannot be undone.`)) {
-      deleteDiscussion(discussion.id);
+      try {
+        await deleteDiscussion(discussion.id);
+        // Add a success toast here if you have a toast system
+      } catch (error) {
+        console.error("Failed to delete discussion:", error);
+        // Add an error toast here
+      }
     }
     setActiveDropdown(null);
   };
@@ -127,10 +140,8 @@ export function DiscussionList({ onCreateNew, onSelectDiscussion, onEditDiscussi
             <span>New Discussion</span>
           </button>
         </div>
-
         {/* Search and Filters */}
         <div className="flex flex-col sm:flex-row gap-4">
-          {/* Search */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -141,24 +152,12 @@ export function DiscussionList({ onCreateNew, onSelectDiscussion, onEditDiscussi
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-
-          {/* Sort */}
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortOption)} className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
             <option value="recent">Recent</option>
             <option value="title">Title A-Z</option>
             <option value="oldest">Oldest</option>
           </select>
-
-          {/* Filter */}
-          <select
-            value={filterBy}
-            onChange={(e) => setFilterBy(e.target.value as FilterOption)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
+          <select value={filterBy} onChange={(e) => setFilterBy(e.target.value as FilterOption)} className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
             <option value="all">All Discussions</option>
             <option value="mine">My Discussions</option>
             <option value="public">Public</option>
@@ -170,7 +169,11 @@ export function DiscussionList({ onCreateNew, onSelectDiscussion, onEditDiscussi
 
       {/* Discussion List */}
       <div className="flex-1 overflow-y-auto">
-        {filteredAndSortedDiscussions.length === 0 ? (
+        {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            </div>
+        ) : filteredAndSortedDiscussions.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-500">
             <div className="text-center">
               <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-400" />
@@ -193,7 +196,6 @@ export function DiscussionList({ onCreateNew, onSelectDiscussion, onEditDiscussi
                 onClick={() => onSelectDiscussion(discussion)}
                 className="group bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer relative"
               >
-                {/* Header */}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1 min-w-0 pr-4">
                     <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors truncate">
@@ -204,58 +206,50 @@ export function DiscussionList({ onCreateNew, onSelectDiscussion, onEditDiscussi
                     </p>
                   </div>
                   
-                  {/* Actions */}
-                  <div className="relative">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveDropdown(activeDropdown === discussion.id ? null : discussion.id);
-                      }}
-                      className="p-1 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                    
-                    {activeDropdown === discussion.id && (
-                      <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                        {discussion.creatorId === user?.id && (
-                          <>
-                            <button
-                              onClick={(e) => handleEditDiscussion(discussion, e)}
-                              className="flex items-center space-x-2 w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                            >
-                              <Edit className="w-4 h-4" />
-                              <span>Edit Discussion</span>
-                            </button>
-                            <button
-                              onClick={(e) => handleDeleteDiscussion(discussion, e)}
-                              className="flex items-center space-x-2 w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              <span>Delete Discussion</span>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  {discussion.creatorId === user?.id && (
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveDropdown(activeDropdown === discussion.id ? null : discussion.id);
+                        }}
+                        className="p-1 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                      
+                      {activeDropdown === discussion.id && (
+                        <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                          <button
+                            onClick={(e) => handleEditDiscussion(discussion, e)}
+                            className="flex items-center space-x-2 w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Edit className="w-4 h-4" />
+                            <span>Edit Discussion</span>
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteDiscussion(discussion, e)}
+                            className="flex items-center space-x-2 w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Delete Discussion</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {/* Tags */}
                 {discussion.tags && discussion.tags.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-3">
                     {discussion.tags.map((tag, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                      >
+                      <span key={index} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                         {tag}
                       </span>
                     ))}
                   </div>
                 )}
 
-                {/* Footer */}
                 <div className="flex items-center justify-between text-sm text-gray-500">
                   <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-1">

@@ -1,3 +1,5 @@
+// src/components/discussions/DiscussionForm.tsx
+
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Save, X, Globe, Users, Lock } from 'lucide-react';
@@ -21,6 +23,7 @@ interface DiscussionFormProps {
 
 export function DiscussionForm({ discussion, onSuccess, onCancel }: DiscussionFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null); // Add state for form-specific errors
   const { createDiscussion, updateDiscussion } = useDiscussionsStore();
   const { user } = useAuthStore();
   
@@ -44,6 +47,7 @@ export function DiscussionForm({ discussion, onSuccess, onCancel }: DiscussionFo
     if (!user) return;
     
     setIsLoading(true);
+    setFormError(null);
     
     try {
       const tags = data.tags
@@ -53,7 +57,7 @@ export function DiscussionForm({ discussion, onSuccess, onCancel }: DiscussionFo
 
       if (discussion) {
         // Update existing discussion
-        updateDiscussion(discussion.id, {
+        await updateDiscussion(discussion.id, {
           title: data.title.trim(),
           description: data.description.trim(),
           privacy: data.privacy,
@@ -62,17 +66,17 @@ export function DiscussionForm({ discussion, onSuccess, onCancel }: DiscussionFo
         onSuccess(discussion.id);
       } else {
         // Create new discussion
-        const discussionId = createDiscussion({
+        const newDiscussionId = await createDiscussion({
           title: data.title.trim(),
           description: data.description.trim(),
           privacy: data.privacy,
-          creatorId: user.id,
           tags: tags.length > 0 ? tags : undefined
         });
-        onSuccess(discussionId);
+        onSuccess(newDiscussionId);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving discussion:', error);
+      setFormError(error.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -109,6 +113,13 @@ export function DiscussionForm({ discussion, onSuccess, onCancel }: DiscussionFo
 
         {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
+          {/* Form Error Message */}
+          {formError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-md">
+                  {formError}
+              </div>
+          )}
+
           {/* Title */}
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
