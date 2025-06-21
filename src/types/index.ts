@@ -83,10 +83,12 @@ export interface AuthState {
 export interface FriendsState {
   friends: User[];
   friendRequests: FriendRequest[];
-  sendFriendRequest: (toUserId: string) => void;
-  acceptFriendRequest: (requestId: string) => void;
-  declineFriendRequest: (requestId: string) => void;
-  removeFriend: (friendId: string) => void;
+  fetchFriends: () => Promise<void>;
+  fetchFriendRequests: () => Promise<void>;
+  sendFriendRequest: (toUserId: string) => Promise<boolean>;
+  acceptFriendRequest: (requestId: string) => Promise<void>;
+  declineFriendRequest: (requestId: string) => Promise<void>;
+  removeFriend: (friendId: string) => Promise<void>;
 }
 
 export interface DiscussionsState {
