@@ -117,10 +117,10 @@ export function NodeEditor({ nodeId, onClose }: NodeEditorProps) {
               className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
               placeholder="Enter the content for this node..."
               autoFocus
-              maxLength={500}
+              maxLength={2000}
             />
             <div className="mt-1 text-xs text-right text-gray-500">
-              {content.length}/500
+              {content.length}/2000
             </div>
           </div>
         </div>

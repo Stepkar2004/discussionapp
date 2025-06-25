@@ -50,6 +50,7 @@
     "konva": "^9.3.20",
     "lucide-react": "^0.364.0",
     "next-themes": "^0.4.4",
+    "pathfinding": "^0.4.18",
     "react": "^18.3.1",
     "react-day-picker": "8.10.1",
     "react-dom": "^18.3.1",
@@ -69,6 +70,7 @@
   "devDependencies": {
     "@eslint/js": "^9.15.0",
     "@types/node": "^22.10.7",
+    "@types/pathfinding": "^0.1.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/react-router-dom": "^5",
