@@ -23,8 +23,11 @@ export const useCanvasEvents = () => {
   const [tempConnection, setTempConnection] = useState<{ x: number; y: number } | null>(null);
   
   const handleCanvasClick = useCallback((e: KonvaEventObject<MouseEvent>) => {
-    // Check if the click was on the stage background itself
-    if (e.target === e.target.getStage() || e.target.attrs.id === 'background-rect') {
+    // THIS IS THE FINAL FIX:
+    // We check if the click target is the Stage itself.
+    // If a user clicks a Node (a Group), the target will be that Group, NOT the Stage.
+    // This correctly differentiates a click on the background from a click on a shape.
+    if (e.target === e.target.getStage()) {
       setSelectedNode(undefined);
       setEditingNode(undefined);
       if (isConnecting) {

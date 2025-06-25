@@ -24,6 +24,7 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
     isConnecting,
     connectionStart,
     tempConnection,
+    handleCanvasClick,
     handleCanvasDoubleClick,
     handleMouseMove,
     nodeEventHandlers,
@@ -76,7 +77,6 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
   };
 
   return (
-    // FIX 1: Restore the original container styling
     <div className="relative w-full h-full bg-white border border-gray-200 rounded-lg overflow-hidden">
       <Stage
         ref={stageRef}
@@ -90,18 +90,10 @@ export function GraphCanvas({ width, height }: GraphCanvasProps) {
         onDragEnd={handleStageDragEnd}
         onWheel={handleWheel}
         onMouseMove={handleMouseMove}
+        onDblClick={handleCanvasDoubleClick}
+        onClick={handleCanvasClick} // Correctly on the stage
       >
         <Layer>
-          {/* FIX 2: Remove the grey background Rect. The stage is now transparent. */}
-          {/* The white background comes from the parent div. */}
-          {/* The double-click handler moves to the Stage itself. */}
-          <Rect
-              id="background-rect-for-events"
-              x={-10000} y={-10000}
-              width={20000} height={20000}
-              fill="transparent" // Make it transparent
-              onDblClick={handleCanvasDoubleClick}
-          />
           {connections.map(conn => <KonvaConnection key={conn.id} connection={conn} nodes={nodes} />)}
           {renderTempConnection()}
           {nodes.map(node => (
