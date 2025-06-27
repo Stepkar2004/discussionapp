@@ -1,11 +1,12 @@
 // src/components/graph/KonvaNode.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Group, Rect, Text, Circle } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { GraphNode } from '../../types';
 import { getNodeTypeConfig } from '../../lib/utils';
 import { useDiscussionsStore } from '../../stores/discussionsStore';
+import { COLLAPSED_HEIGHT, TITLE_BAR_HEIGHT } from '../../lib/constants';
 
 interface KonvaNodeProps {
   node: GraphNode;
@@ -28,17 +29,23 @@ export const KonvaNode: React.FC<KonvaNodeProps> = ({
   onNodeDragStart,
   onNodeDragEnd,
 }) => {
-  const { updateNode } = useDiscussionsStore();
+  const { updateNode, setSelectedNode } = useDiscussionsStore();
   
   const [size, setSize] = useState({ width: node.width, height: node.height });
   const [isResizing, setIsResizing] = useState(false);
 
   const config = getNodeTypeConfig(node.type);
 
-  const handleResizeDragMove = (e: KonvaEventObject<DragEvent>) => {
-    // --- The Fix: Stop event bubbling ---
-    e.cancelBubble = true;
+  const isCollapsed = node.isCollapsed ?? false;
+  const height = useMemo(() => isCollapsed ? COLLAPSED_HEIGHT : size.height, [isCollapsed, size.height]);
 
+  const handleToggleCollapse = () => {
+    setSelectedNode(node.id);
+    updateNode(node.id, { isCollapsed: !isCollapsed });
+  };
+
+  const handleResizeDragMove = (e: KonvaEventObject<DragEvent>) => {
+    e.cancelBubble = true;
     const handle = e.target;
     const newWidth = Math.max(MIN_WIDTH, Math.round(handle.x() + HANDLE_SIZE));
     const newHeight = Math.max(MIN_HEIGHT, Math.round(handle.y() + HANDLE_SIZE));
@@ -49,18 +56,14 @@ export const KonvaNode: React.FC<KonvaNodeProps> = ({
   };
   
   const handleResizeDragEnd = (e: KonvaEventObject<DragEvent>) => {
-    // --- The Fix: Stop event bubbling ---
     e.cancelBubble = true;
-
     setIsResizing(false);
-    // Use a timeout to ensure the state update happens after the event cycle
     setTimeout(() => {
-        updateNode(node.id, { width: size.width, height: size.height });
+        updateNode(node.id, { width: size.width, height: size.height, isCollapsed: false });
     }, 0);
   };
 
   const handleResizeDragStart = (e: KonvaEventObject<DragEvent>) => {
-    // --- The Fix: Stop event bubbling ---
     e.cancelBubble = true;
     setIsResizing(true);
   }
@@ -77,10 +80,9 @@ export const KonvaNode: React.FC<KonvaNodeProps> = ({
       onDragStart={(e) => onNodeDragStart(node.id, e)}
       onDragEnd={(e) => onNodeDragEnd(node.id, e)}
     >
-      {/* Main node body */}
       <Rect
         width={size.width}
-        height={size.height}
+        height={height}
         fill={config.color}
         opacity={0.85}
         cornerRadius={8}
@@ -93,40 +95,79 @@ export const KonvaNode: React.FC<KonvaNodeProps> = ({
         shadowOffsetY={2}
       />
       
-      {/* Icon */}
-      <Circle x={20} y={20} radius={12} fill="white" opacity={0.9} />
-      <Text x={8} y={8} width={24} height={24} text={config.icon} fontSize={16} align="center" verticalAlign="middle" />
-      
-      {/* Content text */}
-      <Text
-        x={45} y={15}
-        width={size.width - 55}
-        height={size.height - 30}
-        text={node.content}
-        fontSize={12}
-        fontFamily="Arial"
-        fill="white"
-        wrap="word"
-        ellipsis={false}
-        verticalAlign="top"
-        listening={false}
-      />
-      
-      {/* Type label */}
-      <Text
-        x={10} y={size.height - 25}
-        width={size.width - 20}
-        text={config.label}
-        fontSize={10}
-        fontFamily="Arial"
-        fill="white"
-        opacity={0.8}
-        align="left"
-        listening={false}
+      <Rect
+        width={size.width}
+        height={TITLE_BAR_HEIGHT}
+        fill="rgba(0,0,0,0.1)"
+        cornerRadius={[8, 8, 0, 0]}
+        onClick={(e) => {
+          e.cancelBubble = true;
+          handleToggleCollapse();
+        }}
+        onTap={(e) => {
+          e.cancelBubble = true;
+          handleToggleCollapse();
+        }}
       />
 
-      {/* Resize Handle */}
-      {isSelected && (
+      <Group listening={false}>
+        <Circle x={20} y={20} radius={12} fill="white" opacity={0.9} />
+        <Text x={8} y={8} width={24} height={24} text={config.icon} fontSize={16} align="center" verticalAlign="middle" />
+      </Group>
+
+      <Text
+        text={isCollapsed ? '▸' : '▾'}
+        x={size.width - 22}
+        y={12}
+        fontSize={16}
+        fill="white"
+        listening={false}
+      />
+      
+      {!isCollapsed && (
+        <Group listening={false}>
+            <Text
+                x={10}
+                y={TITLE_BAR_HEIGHT + 10} // Add padding
+                width={size.width - 20}
+                height={size.height - TITLE_BAR_HEIGHT - 35} // Reserve space for the label
+                text={node.content}
+                fontSize={12}
+                fontFamily="Arial"
+                fill="white"
+                wrap="word"
+                ellipsis={true}
+                verticalAlign="top"
+            />
+            
+            <Text
+                x={10} y={size.height - 25}
+                width={size.width - 20}
+                text={config.label}
+                fontSize={10}
+                fontFamily="Arial"
+                fill="white"
+                opacity={0.8}
+                align="left"
+            />
+        </Group>
+      )}
+
+      <Text
+          x={45} y={12}
+          width={size.width - 70}
+          text={config.label}
+          fontSize={14}
+          fontFamily="Arial"
+          fill="white"
+          fontStyle="bold"
+          wrap="word"
+          ellipsis={true}
+          verticalAlign="middle"
+          listening={false}
+      />
+
+      {isSelected && !isCollapsed && (
         <Rect
           name="resize-handle"
           x={size.width - HANDLE_SIZE}

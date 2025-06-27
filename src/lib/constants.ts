@@ -19,8 +19,11 @@ export const CONNECTION_TYPES = [
 
 export const DEFAULT_NODE_SIZE = {
   width: 200,
-  height: 100
+  height: 120
 };
+
+export const COLLAPSED_HEIGHT = 40;
+export const TITLE_BAR_HEIGHT = 40;
 
 export const CANVAS_SETTINGS = {
   minScale: 0.1,

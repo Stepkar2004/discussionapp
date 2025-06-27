@@ -1,6 +1,6 @@
 // src/components/graph/useCanvasEvents.ts
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { useDiscussionsStore } from '../../stores/discussionsStore';
 import { NodeType } from '../../types';
@@ -11,22 +11,37 @@ export const useCanvasEvents = () => {
     graphState,
     addNode,
     updateNode,
+    deleteNode, // Make sure to get deleteNode from the store
     addConnection,
     setSelectedNode,
     setEditingNode,
   } = useDiscussionsStore();
 
-  const { scale, offset } = graphState;
+  const { scale, offset, selectedNodeId } = graphState;
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionStart, setConnectionStart] = useState<string | null>(null);
   const [tempConnection, setTempConnection] = useState<{ x: number; y: number } | null>(null);
+
+  // Keyboard event for deleting nodes
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNodeId) {
+        // Prevent deletion if user is typing in an input field
+        if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+          return;
+        }
+        deleteNode(selectedNodeId);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedNodeId, deleteNode]);
   
   const handleCanvasClick = useCallback((e: KonvaEventObject<MouseEvent>) => {
-    // THIS IS THE FINAL FIX:
-    // We check if the click target is the Stage itself.
-    // If a user clicks a Node (a Group), the target will be that Group, NOT the Stage.
-    // This correctly differentiates a click on the background from a click on a shape.
     if (e.target === e.target.getStage()) {
       setSelectedNode(undefined);
       setEditingNode(undefined);

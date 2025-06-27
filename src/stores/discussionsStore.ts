@@ -44,6 +44,7 @@ const mapGraphNodeRowToGraphNode = (row: GraphNodeRow): GraphNode => ({
     discussionId: row.discussion_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    isCollapsed: row.is_collapsed ?? false, // Map the new field
 });
 
 const mapConnectionRowToNodeConnection = (row: ConnectionRow): NodeConnection => ({
@@ -188,7 +189,6 @@ export const useDiscussionsStore = create<DiscussionsState>()(
         });
     },
 
-    // When we add a node, we pass camelCase data, so we must map it to snake_case for the DB insert
     addNode: async (nodeData) => {
       const { data, error } = await getSupabase().from('graph_nodes').insert({
           discussion_id: nodeData.discussionId,
@@ -197,30 +197,48 @@ export const useDiscussionsStore = create<DiscussionsState>()(
           x: nodeData.x,
           y: nodeData.y,
           width: nodeData.width,
-          height: nodeData.height
+          height: nodeData.height,
+          is_collapsed: false, // Set default value
       }).select().single();
       if (error) throw error;
 
-      set(state => ({ graphState: { ...state.graphState, nodes: [...state.graphState.nodes, mapGraphNodeRowToGraphNode(data)] }})); // <-- FIX
+      set(state => ({ graphState: { ...state.graphState, nodes: [...state.graphState.nodes, mapGraphNodeRowToGraphNode(data)] }}));
       return data.id;
     },
 
-    // Map the updates to snake_case for the DB
     updateNode: async (id, updates) => {
-      const dbUpdates = {
-          ...updates,
-          discussion_id: updates.discussionId,
-          updated_at: new Date().toISOString()
+      const dbUpdates: Partial<GraphNodeRow> = {
+        updated_at: new Date().toISOString(),
       };
-      delete dbUpdates.discussionId; // remove camelCase key
-      delete dbUpdates.createdAt;
-      delete dbUpdates.updatedAt;
 
-      const { data, error } = await getSupabase().from('graph_nodes').update(dbUpdates).eq('id', id).select().single();
-      if (error) throw error;
+      // Map frontend camelCase to backend snake_case
+      if (updates.content !== undefined) dbUpdates.content = updates.content;
+      if (updates.type !== undefined) dbUpdates.type = updates.type;
+      if (updates.x !== undefined) dbUpdates.x = updates.x;
+      if (updates.y !== undefined) dbUpdates.y = updates.y;
+      if (updates.width !== undefined) dbUpdates.width = updates.width;
+      if (updates.height !== undefined) dbUpdates.height = updates.height;
+      if (updates.isCollapsed !== undefined) dbUpdates.is_collapsed = updates.isCollapsed;
+
+      const { data, error } = await getSupabase()
+        .from('graph_nodes')
+        .update(dbUpdates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error updating node:", error);
+        throw error;
+      }
 
       set(state => ({
-        graphState: { ...state.graphState, nodes: state.graphState.nodes.map(n => n.id === id ? mapGraphNodeRowToGraphNode(data) : n) } // <-- FIX
+        graphState: { 
+          ...state.graphState, 
+          nodes: state.graphState.nodes.map(n => 
+            n.id === id ? mapGraphNodeRowToGraphNode(data) : n
+          )
+        }
       }));
     },
 

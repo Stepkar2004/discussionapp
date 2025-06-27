@@ -1,6 +1,7 @@
 // src/lib/pathfinder.ts
 
 import { GraphNode } from '../types';
+import { COLLAPSED_HEIGHT } from './constants';
 
 // --- TYPE DEFINITIONS & CONFIG ---
 interface Point { x: number; y: number; }
@@ -75,22 +76,25 @@ export function findOrthogonalPath(
   allNodes: GraphNode[]
 ): Point[] {
 
-  const startCenter = { x: startNode.x + startNode.width / 2, y: startNode.y + startNode.height / 2 };
-  const endCenter = { x: endNode.x + endNode.width / 2, y: endNode.y + endNode.height / 2 };
+  const startHeight = startNode.isCollapsed ? COLLAPSED_HEIGHT : startNode.height;
+  const endHeight = endNode.isCollapsed ? COLLAPSED_HEIGHT : endNode.height;
+
+  const startCenter = { x: startNode.x + startNode.width / 2, y: startNode.y + startHeight / 2 };
+  const endCenter = { x: endNode.x + endNode.width / 2, y: endNode.y + endHeight / 2 };
 
   const allNodeRects: Rect[] = allNodes.map(n => ({
-    x: n.x, y: n.y, width: n.width, height: n.height
+    x: n.x, y: n.y, width: n.width, height: n.isCollapsed ? COLLAPSED_HEIGHT : n.height
   }));
 
   const startPorts: Point[] = [
     { x: startCenter.x, y: startNode.y },
-    { x: startCenter.x, y: startNode.y + startNode.height },
+    { x: startCenter.x, y: startNode.y + startHeight },
     { x: startNode.x, y: startCenter.y },
     { x: startNode.x + startNode.width, y: startCenter.y },
   ];
   const endPorts: Point[] = [
     { x: endCenter.x, y: endNode.y },
-    { x: endCenter.x, y: endNode.y + endNode.height },
+    { x: endCenter.x, y: endNode.y + endHeight },
     { x: endNode.x, y: endCenter.y },
     { x: endNode.x + endNode.width, y: endCenter.y },
   ];

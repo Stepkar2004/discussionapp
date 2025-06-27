@@ -49,6 +49,7 @@ export interface GraphNode {
   discussionId: string;
   createdAt: string;
   updatedAt: string;
+  isCollapsed?: boolean;
 }
 
 export interface NodeConnection {
